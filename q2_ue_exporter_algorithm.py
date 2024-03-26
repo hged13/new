@@ -238,23 +238,20 @@ class Q2_UE_exporterAlgorithm(QgsProcessingAlgorithm):
     
         # This will change the data to fit the compatible dimensions
     def resample_band_data(self, band_data, new_width, new_height):
-        padded = np.full((new_height, new_width), 0, dtype=band_data.dtype)  # Use 0 for padding
+        padded = np.full((new_height, new_width), -1, dtype=band_data.dtype)  # Use 0 for padding
+        masked = np.full((new_height, new_width), -1, dtype=band_data.dtype)  # Use 0 for padding
+
         padded[:band_data.shape[0], :band_data.shape[1]] = band_data
-        return padded
+        masked[:band_data.shape[0], :band_data.shape[1]] = 255.0
+
+        return padded, masked
     
-         # This will change the data to fit the compatible dimensions
-    def resample_mask_data(self, mask_data, new_width, new_height):
-         # Instead of using 0 for padding, use 0.03 to indicate resampled (or padded) areas
-        padded = np.full((new_height, new_width), 0.3, dtype=mask_data.dtype)  # Use 0.03 for padding
-        # Copy the original mask data into the padded array, preserving original mask values
-        padded[:mask_data.shape[0], :mask_data.shape[1]] = mask_data
-        return padded
+   
     
         # this function will convert the tif band to a heightmap (a png.)
     def convert_image_band(self, img_data, output_filename, new_width, new_height, params, output_directory):
         img_data = np.array(img_data)
 
-        original_mask = np.full(img_data.shape, 0.7)
 
 
         if len(img_data.shape) > 2:
@@ -265,10 +262,11 @@ class Q2_UE_exporterAlgorithm(QgsProcessingAlgorithm):
     
 
         # Now pad the data before normalization
-        img_data_padded = self.resample_band_data(img_data, new_width, new_height)
-        resampled_mask = self.resample_mask_data(original_mask, new_width, new_height)
+        img_data_padded, resampled_mask = self.resample_band_data(img_data, new_width, new_height)
 
+        # Scale binary mask values from 1 to 255
         mask_image = Image.fromarray(resampled_mask.astype('uint8'))
+
         output_filename1 = output_directory + "/bounds.png"
 
             # Save the image
@@ -276,7 +274,7 @@ class Q2_UE_exporterAlgorithm(QgsProcessingAlgorithm):
     
 
     # Separate actual data from sentinel values
-        actual_data = np.where(img_data_padded != 0, img_data_padded, 0)  # Check for 0 as padding
+        actual_data = np.where(img_data_padded != -1, img_data_padded, -1)  # Check for 0 as padding
 
 
     # Flatten the array and find unique elements
@@ -304,7 +302,7 @@ class Q2_UE_exporterAlgorithm(QgsProcessingAlgorithm):
         z_scale_percentage = (range_val *100/ ue_default_range)/30
         params.append(z_scale_percentage)
         # Apply the sentinel value in the 16-bit range
-        img_data_16bit = np.where(img_data_padded != 0, normalized_data, 0)  # Using 0 for sentinel in 16-bit
+        img_data_16bit = np.where(img_data_padded != -1, normalized_data, -1)  # Using 0 for sentinel in 16-bit
 
     # Flatten the array and find unique elements
         unique_values = np.unique(img_data_16bit.ravel())
